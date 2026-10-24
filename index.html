@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba de Desbloqueo WebAuthn</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        /* Estilo del botón simulando el de Yubico */
+        .enroll-button {
+            background-color: #2b3a42; /* Color oscuro similar al tema 'secondary' */
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+
+        .enroll-button:hover {
+            background-color: #3e505b;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .enroll-button:active {
+            transform: translateY(1px);
+        }
+
+        /* Estilo para el botón de Windows (opcional) */
+        .windows-button {
+            margin-top: 20px;
+        }
+        .windows-button a {
+            color: #0078d4;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .windows-button a:hover {
+            text-decoration: underline;
+        }
+
+        .nota {
+            margin-top: 40px;
+            font-size: 0.9em;
+            color: #666;
+            max-width: 500px;
+            text-align: center;
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Herramienta de Desbloqueo</h1>
+
+    <button class="enroll-button">
+        Click here – Unblock biometrics
+    </button>
+
+    <div class="windows-button">
+        <a href="#">Configurar en Windows (Opcional)</a>
+    </div>
+
+    <div class="nota">
+        <strong>Nota:</strong> Al hacer clic en el botón oscuro, el navegador debería mostrar una ventana emergente pidiendo tu huella digital, PIN o tocar tu YubiKey.
+    </div>
+
+    <script>
+        // 1. Configuración de los botones al cargar la página
+        document.addEventListener('DOMContentLoaded', () => {
+            const buttons = document.querySelectorAll('.enroll-button');
+            if (buttons.length > 0) {
+                buttons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        console.log("Botón presionado, iniciando WebAuthn...");
+                        WebAuthnTestCreate('required');
+                    });
+                });
+            } else {
+                console.warn('No buttons with class "enroll-button" found');
+            }
+        });
+
+        // 2. Función Principal WebAuthn
+        const WebAuthnTestCreate = uv => {
+            var _window$navigator;
+            // Verificar soporte
+            if (!((_window$navigator = window.navigator) !== null && _window$navigator !== void 0 && _window$navigator.credentials)) {
+                alert("Tu navegador no soporta WebAuthn.");
+                return null;
+            }
+
+            // Obtener el dominio actual (RP ID)
+            let rpId = window.location.origin.split('://')[1];
+            if (rpId && rpId.includes(':')) {
+                rpId = rpId.split(':')[0]; // Corregido: usar rpId en el split
+            }
+            // Si estamos en un archivo local (file://), rpId será undefined, lo forzamos a null o localhost para evitar error crítico
+            if (!rpId) {
+                console.warn("Estás ejecutando esto desde un archivo local, WebAuthn podría fallar por seguridad.");
+                // Nota: WebAuthn estricto requiere https o localhost.
+            }
+
+            const challenge = new Uint8Array(16);
+            window.crypto.getRandomValues(challenge);
+            
+            const publicKeyCredentialCreationOptions = {
+                challenge: challenge,
+                rp: {
+                    id: rpId, // Si es archivo local, esto puede dar error. Ideal usar localhost server.
+                    name: 'Prueba Yubico Local'
+                },
+                user: {
+                    name: 'usuario@prueba.com',
+                    displayName: 'Usuario Test',
+                    id: new Uint8Array(16) 
+                },
+                pubKeyCredParams: [{
+                    type: 'public-key',
+                    alg: -7 // ES256
+                }, {
+                    type: 'public-key',
+                    alg: -257 // RS256
+                }],
+                timeout: 120000,
+                authenticatorSelection: {
+                    authenticatorAttachment: 'cross-platform', // Pide llave externa
+                    userVerification: uv
+                },
+                attestation: 'none',
+                hints: ["security-key"]
+            };
+
+            console.log("Enviando solicitud al navegador...", publicKeyCredentialCreationOptions);
+
+            window.navigator.credentials.create({
+                publicKey: publicKeyCredentialCreationOptions
+            }).then(credential => {
+                if (credential === null) {
+                    throw new Error('credential is null');
+                }
+                console.dir(credential);
+                alert('¡ÉXITO!\nSe desbloqueó tu YubiKey.\nTen más cuidado con tu YubiKey.\nTu llave funciona.');
+            }).catch(function(err) {
+                console.error(err);
+                alert('Verifica si el PIN es correcto.\nSi llevas más de 3 intentos, se tendrá que hacer un reset de tu YubiKey.');
+            });
+        };
+
+        // 3. Configuración del botón de Windows
+        document.addEventListener('DOMContentLoaded', () => {
+            const winButtons = document.querySelectorAll('.windows-button a');
+            if (winButtons.length > 0) {
+                winButtons.forEach(button => {
+                    button.href = 'ms-settings:signinoptions-launchsecuritykeyenrollment';
+                });
+            } else {
+                console.warn('No buttons with class "enroll-windows" found');
+            }
+        });
+    </script>
+
+</body>
+</html>
